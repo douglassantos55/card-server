@@ -53,20 +53,13 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	player := NewPlayer(socket)
+	player.Send("Welcome")
+
 	go func() {
-		socket.WriteMessage(websocket.TextMessage, []byte("Welcome"))
+		defer player.Close()
 
-	outer:
 		for {
-			select {
-			case status := <-s.Status:
-				if status == 3 {
-					socket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-					break outer
-				}
-			}
 		}
-
-		s.Status <- 4
 	}()
 }

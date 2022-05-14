@@ -41,7 +41,5 @@ func (c *Client) Connect(addr string) {
 				c.Incoming <- string(message)
 			}
 		}
-
-		c.Incoming <- "done"
 	}()
 }

@@ -33,21 +33,3 @@ func TestClosesServer(t *testing.T) {
 	case <-time.After(time.Millisecond):
 	}
 }
-
-func TestStopsGoroutines(t *testing.T) {
-	server := NewServer()
-	server.ListenQuietly("0.0.0.0:8080")
-
-	client := NewClient("0.0.0.0:8080")
-	<-client.Incoming // welcome
-
-	server.Close()
-
-	if <-client.Incoming != "done" {
-		t.Error("Didnt kill client's goroutine")
-	}
-
-	if <-server.Status != 4 {
-		t.Error("Didnt kill server's goroutine")
-	}
-}

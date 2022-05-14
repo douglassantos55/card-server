@@ -41,8 +41,8 @@ func (s *Server) Listen(addr string) {
 }
 
 func (s *Server) ListenQuietly(addr string) {
-    go s.Listen(addr)
-    time.Sleep(time.Millisecond)
+	go s.Listen(addr)
+	time.Sleep(time.Millisecond)
 }
 
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {

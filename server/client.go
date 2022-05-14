@@ -34,7 +34,7 @@ func (c *Client) Connect(addr string) {
 			_, message, err := socket.ReadMessage()
 
 			if err != nil {
-                break
+				break
 			}
 
 			if message != nil {
@@ -42,6 +42,6 @@ func (c *Client) Connect(addr string) {
 			}
 		}
 
-        c.Incoming <- "done"
+		c.Incoming <- "done"
 	}()
 }

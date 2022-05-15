@@ -72,3 +72,17 @@ func TestRemoveEmptied(t *testing.T) {
 		t.Error("Should not remove from empty queue")
 	}
 }
+
+func TestDequeueReducesPlayers(t *testing.T) {
+	queue := NewQueue()
+	queue.Queue(&Player{Name: "test"})
+	queue.Queue(&Player{Name: "other"})
+
+	queue.Dequeue()
+	queue.Dequeue()
+
+	if queue.Length() != 0 {
+		t.Errorf("Expected 0, got %v", queue.Length())
+	}
+
+}

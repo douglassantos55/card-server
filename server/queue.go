@@ -41,6 +41,7 @@ func (q *Queue) Dequeue() *Player {
 	if node == nil {
 		return nil
 	}
+	delete(q.players, node.Player)
 	return node.Player
 }
 
@@ -61,4 +62,8 @@ func (q *Queue) Remove(player *Player) bool {
 
 	delete(q.players, player)
 	return true
+}
+
+func (q *Queue) Length() int {
+	return len(q.players)
 }

@@ -54,7 +54,9 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	player := NewPlayer(socket)
-	player.Send("Welcome")
+	player.Send(Response{
+		Type: Welcome,
+	})
 
 	go func() {
 		defer player.Close()

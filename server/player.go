@@ -8,8 +8,8 @@ type Player struct {
 	Name string
 
 	Closing  chan bool
-	Incoming chan string
-	Outgoing chan string
+	Incoming chan Event
+	Outgoing chan Response
 
 	socket *websocket.Conn
 }
@@ -17,8 +17,8 @@ type Player struct {
 func NewPlayer(socket *websocket.Conn) *Player {
 	player := &Player{
 		Closing:  make(chan bool),
-		Incoming: make(chan string),
-		Outgoing: make(chan string),
+		Incoming: make(chan Event),
+		Outgoing: make(chan Response),
 
 		socket: socket,
 	}
@@ -29,8 +29,8 @@ func NewPlayer(socket *websocket.Conn) *Player {
 	return player
 }
 
-func (p *Player) Send(message string) {
-	p.Outgoing <- message
+func (p *Player) Send(response Response) {
+	p.Outgoing <- response
 }
 
 func (p *Player) Close() {
@@ -39,11 +39,12 @@ func (p *Player) Close() {
 
 func (p *Player) Read() {
 	for {
-		_, msg, err := p.socket.ReadMessage()
+		var event Event
+		err := p.socket.ReadJSON(&event)
 		if err != nil {
 			break
 		}
-		p.Incoming <- string(msg)
+		p.Incoming <- event
 	}
 }
 
@@ -51,7 +52,7 @@ func (p *Player) Write() {
 	for {
 		select {
 		case msg := <-p.Outgoing:
-			p.socket.WriteMessage(websocket.TextMessage, []byte(msg))
+			p.socket.WriteJSON(msg)
 		case <-p.Closing:
 			p.socket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 		}

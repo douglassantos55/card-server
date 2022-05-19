@@ -37,7 +37,7 @@ func NewQueueManager() *QueueManager {
 	return manager
 }
 
-func (qm *QueueManager) Process(event Event) {
+func (qm *QueueManager) Process(event Event, dispatcher *Dispatcher) {
 	switch event.Type {
 	case QueueUp:
 		qm.Register <- event.Player

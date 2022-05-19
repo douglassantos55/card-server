@@ -19,7 +19,7 @@ func TestReceivesWaitForMatch(t *testing.T) {
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: player,
-	})
+	}, nil)
 
 	select {
 	case msg := <-player.Outgoing:
@@ -42,11 +42,11 @@ func TestMatchFound(t *testing.T) {
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p1,
-	})
+	}, nil)
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p2,
-	})
+	}, nil)
 
 	<-p1.Outgoing
 	<-p2.Outgoing
@@ -81,15 +81,15 @@ func TestOthersRemainInQueue(t *testing.T) {
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p1,
-	})
+	}, nil)
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p2,
-	})
+	}, nil)
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p3,
-	})
+	}, nil)
 
 	<-p1.Outgoing
 	<-p2.Outgoing

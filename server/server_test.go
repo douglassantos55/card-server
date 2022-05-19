@@ -6,7 +6,7 @@ import (
 )
 
 func TestAcceptsConnections(t *testing.T) {
-	server := NewServer()
+	server := NewServer(NewDispatcher())
 	defer server.Close()
 
 	server.ListenQuietly("0.0.0.0:8080")
@@ -20,7 +20,7 @@ func TestAcceptsConnections(t *testing.T) {
 }
 
 func TestClosesServer(t *testing.T) {
-	server := NewServer()
+	server := NewServer(NewDispatcher())
 	server.ListenQuietly("0.0.0.0:8080")
 
 	server.Close()
@@ -31,5 +31,35 @@ func TestClosesServer(t *testing.T) {
 	case <-client.Incoming:
 		t.Error("Expected server to be closed")
 	case <-time.After(time.Millisecond):
+	}
+}
+
+func TestDispatchesEvents(t *testing.T) {
+	dispatcher := NewDispatcher()
+
+	handler := &TestHandler{
+		make(chan bool),
+	}
+
+	dispatcher.Register <- handler
+
+	server := NewServer(dispatcher)
+	server.ListenQuietly("0.0.0.0:8080")
+
+	defer server.Close()
+
+	client := NewClient("0.0.0.0:8080")
+
+	client.Outgoing <- Event{
+		Type: QueueUp,
+	}
+
+	select {
+	case executed := <-handler.Executed:
+		if !executed {
+			t.Error("Expected handler to be executed")
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected response from server")
 	}
 }

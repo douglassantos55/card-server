@@ -12,16 +12,18 @@ import (
 type Server struct {
 	Status chan int
 
-	server   *http.Server
-	upgrader websocket.Upgrader
+	server     *http.Server
+	dispatcher *Dispatcher
+	upgrader   websocket.Upgrader
 }
 
-func NewServer() *Server {
+func NewServer(dispatcher *Dispatcher) *Server {
 	return &Server{
 		Status: make(chan int),
 
-		server:   &http.Server{},
-		upgrader: websocket.Upgrader{},
+		dispatcher: dispatcher,
+		server:     &http.Server{},
+		upgrader:   websocket.Upgrader{},
 	}
 }
 
@@ -62,6 +64,10 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 		defer player.Close()
 
 		for {
+			select {
+			case event := <-player.Incoming:
+				s.dispatcher.Dispatch <- event
+			}
 		}
 	}()
 }

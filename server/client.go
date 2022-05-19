@@ -7,12 +7,14 @@ import (
 )
 
 type Client struct {
-	Incoming chan string
+	Incoming chan Response // incoming from server
+	Outgoing chan Event    // outgoing to server
 }
 
 func NewClient(addr string) *Client {
 	client := &Client{
-		Incoming: make(chan string),
+		Incoming: make(chan Response),
+		Outgoing: make(chan Event),
 	}
 
 	client.Connect(addr)
@@ -31,14 +33,22 @@ func (c *Client) Connect(addr string) {
 		defer socket.Close()
 
 		for {
-			_, message, err := socket.ReadMessage()
+			var response Response
+			err := socket.ReadJSON(&response)
 
 			if err != nil {
 				break
 			}
 
-			if message != nil {
-				c.Incoming <- string(message)
+			c.Incoming <- response
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case event := <-c.Outgoing:
+				socket.WriteJSON(event)
 			}
 		}
 	}()

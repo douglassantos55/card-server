@@ -121,3 +121,30 @@ func TestOthersRemainInQueue(t *testing.T) {
 		t.Error("Should not receive match found")
 	}
 }
+
+func TestDequeue(t *testing.T) {
+	manager := NewQueueManager()
+	player := NewTestPlayer()
+
+	manager.Register <- player
+	<-player.Outgoing
+
+	manager.Process(Event{
+		Type:   Dequeue,
+		Player: player,
+	}, nil)
+
+	select {
+	case <-time.After(time.Second):
+		t.Error("Did not receive response from server")
+	case response := <-player.Outgoing:
+		if response.Type != Dequeued {
+			t.Errorf("Expected %v, got %v", Dequeued, response.Type)
+		}
+
+		length := len(manager.queue.players)
+		if length != 0 {
+			t.Errorf("Expected empty queue, got %v", length)
+		}
+	}
+}

@@ -1,19 +1,29 @@
 package server
 
 type QueueManager struct {
-	queue    *Queue
-	Register chan *Player
+	queue *Queue
+
+	Register   chan *Player
+	Unregister chan *Player
 }
 
 func NewQueueManager() *QueueManager {
 	manager := &QueueManager{
-		queue:    NewQueue(),
-		Register: make(chan *Player),
+		queue: NewQueue(),
+
+		Register:   make(chan *Player),
+		Unregister: make(chan *Player),
 	}
 
 	go func() {
 		for {
 			select {
+			case player := <-manager.Unregister:
+				manager.queue.Remove(player)
+
+				player.Send(Response{
+					Type: Dequeued,
+				})
 			case player := <-manager.Register:
 				manager.queue.Queue(player)
 
@@ -41,5 +51,7 @@ func (qm *QueueManager) Process(event Event, dispatcher *Dispatcher) {
 	switch event.Type {
 	case QueueUp:
 		qm.Register <- event.Player
+	case Dequeue:
+		qm.Unregister <- event.Player
 	}
 }

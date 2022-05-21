@@ -36,19 +36,23 @@ func TestReceivesWaitForMatch(t *testing.T) {
 
 func TestMatchFound(t *testing.T) {
 	manager := NewQueueManager()
+	dispatcher := NewDispatcher()
+
 	p1 := NewTestPlayer()
 	p2 := NewTestPlayer()
 
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p1,
-	}, nil)
+	}, dispatcher)
+
+	<-p1.Outgoing
+
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p2,
-	}, nil)
+	}, dispatcher)
 
-	<-p1.Outgoing
 	<-p2.Outgoing
 
 	select {
@@ -74,6 +78,8 @@ func TestMatchFound(t *testing.T) {
 
 func TestOthersRemainInQueue(t *testing.T) {
 	manager := NewQueueManager()
+	dispatcher := NewDispatcher()
+
 	p1 := NewTestPlayer()
 	p2 := NewTestPlayer()
 	p3 := NewTestPlayer()
@@ -81,18 +87,22 @@ func TestOthersRemainInQueue(t *testing.T) {
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p1,
-	}, nil)
+	}, dispatcher)
+
+	<-p1.Outgoing
+
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p2,
-	}, nil)
+	}, dispatcher)
+
+	<-p2.Outgoing
+
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p3,
-	}, nil)
+	}, dispatcher)
 
-	<-p1.Outgoing
-	<-p2.Outgoing
 	<-p3.Outgoing
 
 	select {
@@ -126,10 +136,14 @@ func TestDequeue(t *testing.T) {
 	manager := NewQueueManager()
 	player := NewTestPlayer()
 
-	manager.Register <- player
+	go manager.Process(Event{
+		Type:   QueueUp,
+		Player: player,
+	}, nil)
+
 	<-player.Outgoing
 
-	manager.Process(Event{
+	go manager.Process(Event{
 		Type:   Dequeue,
 		Player: player,
 	}, nil)
@@ -146,5 +160,40 @@ func TestDequeue(t *testing.T) {
 		if length != 0 {
 			t.Errorf("Expected empty queue, got %v", length)
 		}
+	}
+}
+
+func TestDispatchesCreateMatchEvent(t *testing.T) {
+	manager := NewQueueManager()
+	dispatcher := NewTestDispatcher()
+
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	go manager.Process(Event{
+		Type:   QueueUp,
+		Player: p1,
+	}, dispatcher)
+
+	<-p1.Outgoing // wait for match
+
+	go manager.Process(Event{
+		Type:   QueueUp,
+		Player: p2,
+	}, dispatcher)
+
+	<-p2.Outgoing // wait for match
+
+	select {
+	case event := <-dispatcher.Dispatch:
+		if event.Type != CreateMatch {
+			t.Errorf("Expected %v, got %v", CreateMatch, event.Type)
+		}
+		players := event.Payload.([]*Player)
+		if len(players) != 2 {
+			t.Errorf("Expected 2 players, got %v", len(players))
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected response from server")
 	}
 }

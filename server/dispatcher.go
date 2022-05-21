@@ -34,3 +34,12 @@ func NewDispatcher() *Dispatcher {
 
 	return dispatcher
 }
+
+func NewTestDispatcher() *Dispatcher {
+	return &Dispatcher{
+		handlers: make([]Handler, 0),
+
+		Register: make(chan Handler),
+		Dispatch: make(chan Event),
+	}
+}

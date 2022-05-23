@@ -241,6 +241,10 @@ func TestDispatchesStartGame(t *testing.T) {
 		if event.Type != StartGame {
 			t.Errorf("Expected %v, got %v", StartGame, event.Type)
 		}
+		players := event.Payload.([]*Player)
+		if len(players) != 2 {
+			t.Errorf("Expected 2 players, got %v", len(players))
+		}
 	case <-time.After(time.Second):
 		t.Error("Expected event to be dispatched")
 	}

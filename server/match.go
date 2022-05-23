@@ -60,7 +60,8 @@ func NewMatch(players []*Player, confirmDuration time.Duration) *Match {
 
 				if len(match.Confirmed) == len(match.Players) {
 					data.Dispatcher.Dispatch <- Event{
-						Type: StartGame,
+						Type:    StartGame,
+						Payload: match.Confirmed,
 					}
 
 					match.Ready <- true

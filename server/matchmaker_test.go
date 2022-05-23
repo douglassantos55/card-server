@@ -246,6 +246,79 @@ func TestDispatchesStartGame(t *testing.T) {
 	}
 }
 
-func TestMatchIsRemovedFromDispatcher(t *testing.T) {
+func TestMatchIsRemovedFromDispatcherWhenMatchIsCanceled(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
 
+	dispatcher := NewDispatcher()
+	match := NewMatch([]*Player{p1, p2}, time.Minute)
+
+	dispatcher.Register <- match
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchDeclined,
+		Player:  p2,
+		Payload: match.Id.String(),
+	}
+
+	<-p1.Outgoing // match canceled
+	<-p2.Outgoing // match canceled
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchConfirmed,
+		Player:  p1,
+		Payload: match.Id.String(),
+	}
+
+	select {
+	case <-p1.Outgoing:
+		t.Error("Should not receive response from server")
+	case <-time.After(time.Second):
+	}
+}
+
+func TestMatchIsRemovedFromDispatcherWhenMatchIsReady(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	dispatcher := NewDispatcher()
+	match := NewMatch([]*Player{p1, p2}, time.Minute)
+
+	dispatcher.Register <- match
+
+	dispatcher.Dispatch <- Event{
+		Type:    AskConfirmation,
+		Payload: match.Id,
+	}
+
+	<-p1.Outgoing // match found
+	<-p2.Outgoing // match found
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchConfirmed,
+		Player:  p1,
+		Payload: match.Id.String(),
+	}
+
+	<-p1.Outgoing // wait other players
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchConfirmed,
+		Player:  p2,
+		Payload: match.Id.String(),
+	}
+
+	<-p2.Outgoing // wait other players
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchConfirmed,
+		Player:  p1,
+		Payload: match.Id.String(),
+	}
+
+	select {
+	case <-p1.Outgoing:
+		t.Error("Should not receive response from server")
+	case <-time.After(time.Second):
+	}
 }

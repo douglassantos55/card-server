@@ -7,16 +7,18 @@ type Handler interface {
 type Dispatcher struct {
 	handlers []Handler
 
-	Register chan Handler
-	Dispatch chan Event
+	Dispatch   chan Event
+	Register   chan Handler
+	Unregister chan Handler
 }
 
 func NewDispatcher() *Dispatcher {
 	dispatcher := &Dispatcher{
 		handlers: make([]Handler, 0),
 
-		Register: make(chan Handler),
-		Dispatch: make(chan Event),
+		Dispatch:   make(chan Event),
+		Register:   make(chan Handler),
+		Unregister: make(chan Handler),
 	}
 
 	go func() {
@@ -24,6 +26,16 @@ func NewDispatcher() *Dispatcher {
 			select {
 			case handler := <-dispatcher.Register:
 				dispatcher.handlers = append(dispatcher.handlers, handler)
+			case handler := <-dispatcher.Unregister:
+				for i, handle := range dispatcher.handlers {
+					if handle == handler {
+						// remove item
+						dispatcher.handlers = append(
+							dispatcher.handlers[:i],
+							dispatcher.handlers[i+1:]...,
+						)
+					}
+				}
 			case event := <-dispatcher.Dispatch:
 				for _, handler := range dispatcher.handlers {
 					handler.Process(event, dispatcher)

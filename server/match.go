@@ -49,6 +49,8 @@ func NewMatch(players []*Player, confirmDuration time.Duration) *Match {
 						Player: player,
 					}
 				}
+
+				dispatcher.Unregister <- match
 			case data := <-match.Confirm:
 				data.Player.Send(Response{
 					Type: WaitOtherPlayers,
@@ -61,8 +63,8 @@ func NewMatch(players []*Player, confirmDuration time.Duration) *Match {
 						Type: StartGame,
 					}
 
-					print("ready\n")
 					match.Ready <- true
+					data.Dispatcher.Unregister <- match
 				}
 			}
 		}
@@ -95,7 +97,6 @@ func (m *Match) Process(event Event, dispatcher *Dispatcher) {
 					Payload: m.Id.String(),
 				}
 			case <-m.Ready:
-				print("done timeouting\n")
 				break
 			}
 		}()

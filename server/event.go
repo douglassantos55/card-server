@@ -9,7 +9,11 @@ type Event struct {
 type EventType string
 
 const (
-	QueueUp     EventType = "queue_up"
-	Dequeue     EventType = "dequeue"
-	CreateMatch EventType = "create_match"
+	QueueUp         EventType = "queue_up"
+	Dequeue         EventType = "dequeue"
+	CreateMatch     EventType = "create_match"
+	MatchConfirmed  EventType = "match_confirmed"
+	MatchDeclined   EventType = "match_declined"
+	AskConfirmation EventType = "confirm_match"
+	StartGame       EventType = "start_game"
 )

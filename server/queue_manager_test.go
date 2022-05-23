@@ -34,51 +34,9 @@ func TestReceivesWaitForMatch(t *testing.T) {
 	}
 }
 
-func TestMatchFound(t *testing.T) {
-	manager := NewQueueManager()
-	dispatcher := NewDispatcher()
-
-	p1 := NewTestPlayer()
-	p2 := NewTestPlayer()
-
-	go manager.Process(Event{
-		Type:   QueueUp,
-		Player: p1,
-	}, dispatcher)
-
-	<-p1.Outgoing
-
-	go manager.Process(Event{
-		Type:   QueueUp,
-		Player: p2,
-	}, dispatcher)
-
-	<-p2.Outgoing
-
-	select {
-	case response := <-p1.Outgoing:
-		expected := MatchFound
-		if response.Type != expected {
-			t.Errorf("Expected %v, got %v", expected, response.Type)
-		}
-	case <-time.After(time.Second):
-		t.Error("Expected response from server")
-	}
-
-	select {
-	case response := <-p2.Outgoing:
-		expected := MatchFound
-		if response.Type != expected {
-			t.Errorf("Expected %v, got %v", expected, response.Type)
-		}
-	case <-time.After(time.Second):
-		t.Error("Expected response from server")
-	}
-}
-
 func TestOthersRemainInQueue(t *testing.T) {
 	manager := NewQueueManager()
-	dispatcher := NewDispatcher()
+	dispatcher := NewTestDispatcher()
 
 	p1 := NewTestPlayer()
 	p2 := NewTestPlayer()
@@ -89,41 +47,31 @@ func TestOthersRemainInQueue(t *testing.T) {
 		Player: p1,
 	}, dispatcher)
 
-	<-p1.Outgoing
-
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p2,
 	}, dispatcher)
-
-	<-p2.Outgoing
 
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p3,
 	}, dispatcher)
 
+	<-p1.Outgoing
+	<-p2.Outgoing
+
+	select {
+	case event := <-dispatcher.Dispatch:
+		if event.Type != CreateMatch {
+			t.Errorf("Expected %v, got %v", CreateMatch, event.Type)
+		}
+		players := event.Payload.([]*Player)
+		if len(players) != 2 {
+			t.Errorf("Expected 2 players, got %v", len(players))
+		}
+	}
+
 	<-p3.Outgoing
-
-	select {
-	case response := <-p1.Outgoing:
-		expected := MatchFound
-		if response.Type != expected {
-			t.Errorf("Expected %v, got %v", expected, response.Type)
-		}
-	case <-time.After(time.Second):
-		t.Error("Expected response from server")
-	}
-
-	select {
-	case response := <-p2.Outgoing:
-		expected := MatchFound
-		if response.Type != expected {
-			t.Errorf("Expected %v, got %v", expected, response.Type)
-		}
-	case <-time.After(time.Second):
-		t.Error("Expected response from server")
-	}
 
 	select {
 	case <-time.After(time.Second):

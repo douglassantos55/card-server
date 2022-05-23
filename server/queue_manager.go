@@ -1,12 +1,10 @@
 package server
 
-import "time"
-
 type QueueManager struct {
 	queue *Queue
 
 	Unregister chan *Player
-	Register   chan *Player
+	Register   chan WithDispatcher
 	Players    chan []*Player
 }
 
@@ -15,7 +13,7 @@ func NewQueueManager() *QueueManager {
 		queue: NewQueue(),
 
 		Unregister: make(chan *Player),
-		Register:   make(chan *Player),
+		Register:   make(chan WithDispatcher),
 		Players:    make(chan []*Player),
 	}
 
@@ -28,25 +26,25 @@ func NewQueueManager() *QueueManager {
 				player.Send(Response{
 					Type: Dequeued,
 				})
-			case player := <-manager.Register:
-				manager.queue.Queue(player)
+			case data := <-manager.Register:
+				manager.queue.Queue(data.Player)
 
-				player.Send(Response{
+				data.Player.Send(Response{
 					Type: WaitForMatch,
 				})
 
 				if manager.queue.Length() == 2 {
 					players := make([]*Player, 0)
+
 					for i := 0; i < 2; i++ {
 						player := manager.queue.Dequeue()
 						players = append(players, player)
-
-						go player.Send(Response{
-							Type: MatchFound,
-						})
 					}
 
-					manager.Players <- players
+					data.Dispatcher.Dispatch <- Event{
+						Type:    CreateMatch,
+						Payload: players,
+					}
 				}
 			}
 		}
@@ -58,15 +56,9 @@ func NewQueueManager() *QueueManager {
 func (qm *QueueManager) Process(event Event, dispatcher *Dispatcher) {
 	switch event.Type {
 	case QueueUp:
-		qm.Register <- event.Player
-
-		select {
-		case players := <-qm.Players:
-			dispatcher.Dispatch <- Event{
-				Type:    CreateMatch,
-				Payload: players,
-			}
-		case <-time.After(time.Millisecond):
+		qm.Register <- WithDispatcher{
+			Player:     event.Player,
+			Dispatcher: dispatcher,
 		}
 	case Dequeue:
 		qm.Unregister <- event.Player

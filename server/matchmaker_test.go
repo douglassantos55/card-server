@@ -322,3 +322,45 @@ func TestMatchIsRemovedFromDispatcherWhenMatchIsReady(t *testing.T) {
 	case <-time.After(time.Second):
 	}
 }
+
+func TestDoesNotTimeoutAfterReady(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	dispatcher := NewDispatcher()
+	match := NewMatch([]*Player{p1, p2}, 100*time.Millisecond)
+
+	dispatcher.Register <- match
+
+	dispatcher.Dispatch <- Event{
+		Type:    AskConfirmation,
+		Payload: match.Id,
+	}
+
+	<-p1.Outgoing
+	<-p2.Outgoing
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchConfirmed,
+		Player:  p1,
+		Payload: match.Id.String(),
+	}
+
+	<-p1.Outgoing // wait other players
+
+	dispatcher.Dispatch <- Event{
+		Type:    MatchConfirmed,
+		Player:  p2,
+		Payload: match.Id.String(),
+	}
+
+	<-p2.Outgoing // wait other players
+
+	select {
+	case <-time.After(200 * time.Millisecond):
+	case <-p1.Outgoing:
+		t.Error("Match should not timeout")
+	case <-p2.Outgoing:
+		t.Error("Match should not timeout")
+	}
+}

@@ -92,10 +92,7 @@ func (m *Match) Process(event Event, dispatcher *Dispatcher) {
 		go func() {
 			select {
 			case <-time.After(m.Duration):
-				dispatcher.Dispatch <- Event{
-					Type:    MatchDeclined,
-					Payload: m.Id.String(),
-				}
+				m.Cancel <- dispatcher
 			case <-m.Ready:
 				break
 			}

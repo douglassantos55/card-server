@@ -47,18 +47,19 @@ func TestOthersRemainInQueue(t *testing.T) {
 		Player: p1,
 	}, dispatcher)
 
+	<-p1.Outgoing
+
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p2,
 	}, dispatcher)
 
+	<-p2.Outgoing
+
 	go manager.Process(Event{
 		Type:   QueueUp,
 		Player: p3,
 	}, dispatcher)
-
-	<-p1.Outgoing
-	<-p2.Outgoing
 
 	select {
 	case event := <-dispatcher.Dispatch:

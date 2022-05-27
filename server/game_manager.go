@@ -1,42 +1,101 @@
 package server
 
 import (
-	"log"
+	"math/rand"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type Deck struct {
+	cards []HasManaCost
+}
+
+func (d *Deck) Draw() HasManaCost {
+	card := d.cards[0]
+	d.cards = append(d.cards[1:])
+	return card
+}
+
+func (d *Deck) Count() int {
+	return len(d.cards)
+}
+
+func (d *Deck) DrawMany(count int) []HasManaCost {
+	var cards []HasManaCost
+	for i := 0; i < count; i++ {
+		cards = append(cards, d.Draw())
+	}
+	return cards
+}
+
+func (d *Deck) Add(card HasManaCost) {
+	d.cards = append(d.cards, card)
+}
+
+func NewDeck() *Deck {
+	var cards []HasManaCost
+	for i := 0; i < 60; i++ {
+		cards = append(
+			cards,
+			NewMinion(rand.Intn(10), rand.Intn(10), rand.Intn(10)),
+		)
+	}
+	return &Deck{cards: cards}
+}
 
 type Discarded struct {
 	Cards  []string
 	Player *Player
 }
 
+type GamePlayer struct {
+	player *Player
+
+	Deck *Deck
+	Hand []HasManaCost
+
+	Current bool
+}
+
+func (gp *GamePlayer) Send(response Response) {
+	gp.player.Send(response)
+}
+
 type Game struct {
 	Id      uuid.UUID
-	Players []*Player
-
 	Ready   []*Player
-	Current *Player
-	Hands   map[*Player][]HasManaCost
+	Players map[*Player]*GamePlayer
 
-	EndTurn chan *Player
-	Discard chan Discarded
-	Started chan time.Duration
+	EndTurn   chan *Player
+	Discard   chan Discarded
+	Started   chan time.Duration
+	StartTurn chan time.Duration
 }
 
 func NewGame(players []*Player) *Game {
+	gamePlayers := map[*Player]*GamePlayer{}
+
+	for idx, player := range players {
+		deck := NewDeck()
+
+		gamePlayers[player] = &GamePlayer{
+			player:  player,
+			Deck:    deck,
+			Current: idx == 0,
+			Hand:    deck.DrawMany(3),
+		}
+	}
+
 	game := &Game{
 		Id:      uuid.New(),
-		Players: players,
-
-		Current: nil,
 		Ready:   make([]*Player, 0),
-		Hands:   make(map[*Player][]HasManaCost),
+		Players: gamePlayers,
 
-		EndTurn: make(chan *Player),
-		Started: make(chan time.Duration),
-		Discard: make(chan Discarded),
+		EndTurn:   make(chan *Player),
+		Started:   make(chan time.Duration),
+		Discard:   make(chan Discarded),
+		StartTurn: make(chan time.Duration),
 	}
 
 	go func() {
@@ -44,55 +103,77 @@ func NewGame(players []*Player) *Game {
 			select {
 			case <-game.Started:
 				for _, player := range game.Players {
-					hand := []HasManaCost{
-						NewMinion(1, 1, 1),
-						NewMinion(2, 1, 2),
-						NewMinion(5, 4, 3),
-					}
-
-					game.Hands[player] = hand
-
-					player.Send(Response{
+					go player.Send(Response{
 						Type:    StartingHand,
-						Payload: hand,
+						Payload: player.Hand,
 					})
 				}
 			case event := <-game.Discard:
-				hand, ok := game.Hands[event.Player]
+				player, ok := game.Players[event.Player]
 
 				if !ok {
-					log.Printf("Hand not found for player %v, %v", hand, event.Player)
 					return
 				}
 
 				for _, cardId := range event.Cards {
-					for idx, card := range hand {
+					for idx, card := range player.Hand {
 						if card.GetId() == cardId {
-							game.Hands[event.Player] = append(
-								game.Hands[event.Player][:idx],
-								game.Hands[event.Player][idx+1:]...,
+							player.Hand = append(
+								player.Hand[:idx],
+								player.Hand[idx+1:]...,
 							)
+
+							player.Deck.Add(card)
 						}
 					}
 				}
 
-				for i := 0; i < len(event.Cards); i++ {
-					game.Hands[event.Player] = append(
-						game.Hands[event.Player],
-						NewMinion(3, 1, 3),
-					)
-				}
+				player.Hand = append(
+					player.Hand,
+					player.Deck.DrawMany(len(event.Cards))...,
+				)
 
 				game.Ready = append(game.Ready, event.Player)
 
-				event.Player.Send(Response{
+				player.Send(Response{
 					Type:    WaitOtherPlayers,
-					Payload: game.Hands[event.Player],
+					Payload: player.Hand,
 				})
 
 				if len(game.Ready) == len(game.Players) {
-					game.StartTurns(75 * time.Second)
+					go game.StartTurns(75 * time.Second)
 				}
+			case duration := <-game.StartTurn:
+				for _, player := range game.Players {
+					if player.Current {
+						card := player.Deck.Draw()
+						go player.Send(Response{
+							Type: StartTurn,
+							Payload: TurnPayload{
+								GameId:    game.Id,
+								CardsLeft: player.Deck.Count(),
+								Card:      card,
+								Duration:  duration,
+							},
+						})
+					} else {
+						go player.Send(Response{
+							Type: WaitTurn,
+						})
+					}
+					player.Current = !player.Current
+				}
+
+				go func() {
+					select {
+					case <-time.After(duration):
+						game.StartTurn <- duration
+						break
+					case <-game.EndTurn:
+						game.StartTurn <- duration
+						break
+					}
+				}()
 			}
 		}
 	}()
@@ -101,43 +182,7 @@ func NewGame(players []*Player) *Game {
 }
 
 func (g *Game) StartTurns(duration time.Duration) {
-	g.Current = g.Players[1]
-	g.NextTurn(duration)
-}
-
-func (g *Game) NextTurn(duration time.Duration) {
-	var next *Player
-
-	for _, player := range g.Players {
-		if player == g.Current {
-			player.Send(Response{
-				Type: WaitTurn,
-			})
-		} else {
-			next = player
-
-			player.Send(Response{
-				Type: StartTurn,
-				Payload: TurnPayload{
-					GameId:   g.Id,
-					Duration: duration,
-				},
-			})
-		}
-	}
-	g.Current = next
-
-	go func() {
-		select {
-		case <-time.After(duration):
-			g.NextTurn(duration)
-			break
-		case <-g.EndTurn:
-			g.NextTurn(duration)
-			break
-		}
-	}()
-
+	g.StartTurn <- duration
 }
 
 func (g *Game) Start(duration time.Duration) {
@@ -165,7 +210,6 @@ func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 			Cards:  data.Cards,
 			Player: event.Player,
 		}
-
 	case EndTurn:
 		uuid, err := uuid.Parse(event.Payload.(string))
 

@@ -364,3 +364,30 @@ func TestEndTurn(t *testing.T) {
 		t.Error("Expected turn to start")
 	}
 }
+
+func TestDrawsCardOnTurnStart(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.Start(100 * time.Millisecond)
+
+	<-p1.Outgoing // starting hand
+	<-p2.Outgoing // starting hand
+
+	time.Sleep(200 * time.Millisecond)
+
+	select {
+	case response := <-p1.Outgoing:
+		payload := response.Payload.(TurnPayload)
+
+		// 3 from starting hand + 1 from star turn
+		if payload.CardsLeft != 56 {
+			t.Errorf("Expected %v, got %v", 56, payload.CardsLeft)
+		}
+
+		if payload.Card == nil {
+			t.Error("Expected card to be drawn")
+		}
+	}
+}

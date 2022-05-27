@@ -26,6 +26,8 @@ const (
 )
 
 type TurnPayload struct {
-	GameId   uuid.UUID
-	Duration time.Duration
+	GameId    uuid.UUID
+	Duration  time.Duration
+	Card      HasManaCost
+	CardsLeft int
 }

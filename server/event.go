@@ -17,6 +17,7 @@ const (
 	AskConfirmation EventType = "confirm_match"
 	StartGame       EventType = "start_game"
 	CardsDiscarded  EventType = "cards_discarded"
+	EndTurn         EventType = "end_turn"
 )
 
 type CardsDiscardedPayload struct {

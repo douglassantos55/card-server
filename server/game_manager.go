@@ -16,9 +16,11 @@ type Game struct {
 	Id      uuid.UUID
 	Players []*Player
 
-	Ready []*Player
-	Hands map[*Player][]HasManaCost
+	Ready   []*Player
+	Current *Player
+	Hands   map[*Player][]HasManaCost
 
+	EndTurn chan *Player
 	Discard chan Discarded
 	Started chan time.Duration
 }
@@ -28,9 +30,11 @@ func NewGame(players []*Player) *Game {
 		Id:      uuid.New(),
 		Players: players,
 
-		Ready: make([]*Player, 0),
-		Hands: make(map[*Player][]HasManaCost),
+		Current: nil,
+		Ready:   make([]*Player, 0),
+		Hands:   make(map[*Player][]HasManaCost),
 
+		EndTurn: make(chan *Player),
 		Started: make(chan time.Duration),
 		Discard: make(chan Discarded),
 	}
@@ -87,7 +91,7 @@ func NewGame(players []*Player) *Game {
 				})
 
 				if len(game.Ready) == len(game.Players) {
-					game.StartTurns()
+					game.StartTurns(75 * time.Second)
 				}
 			}
 		}
@@ -96,21 +100,51 @@ func NewGame(players []*Player) *Game {
 	return game
 }
 
-func (g *Game) StartTurns() {
-	g.Players[0].Send(Response{
-		Type: StartTurn,
-	})
+func (g *Game) StartTurns(duration time.Duration) {
+	g.Current = g.Players[1]
+	g.NextTurn(duration)
+}
 
-	g.Players[1].Send(Response{
-		Type: WaitTurn,
-	})
+func (g *Game) NextTurn(duration time.Duration) {
+	var next *Player
+
+	for _, player := range g.Players {
+		if player == g.Current {
+			player.Send(Response{
+				Type: WaitTurn,
+			})
+		} else {
+			next = player
+
+			player.Send(Response{
+				Type: StartTurn,
+				Payload: TurnPayload{
+					GameId:   g.Id,
+					Duration: duration,
+				},
+			})
+		}
+	}
+	g.Current = next
+
+	go func() {
+		select {
+		case <-time.After(duration):
+			g.NextTurn(duration)
+			break
+		case <-g.EndTurn:
+			g.NextTurn(duration)
+			break
+		}
+	}()
+
 }
 
 func (g *Game) Start(duration time.Duration) {
 	go func() {
 		select {
 		case <-time.After(duration):
-			g.StartTurns()
+			g.StartTurns(75 * time.Second)
 		}
 	}()
 
@@ -131,6 +165,15 @@ func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 			Cards:  data.Cards,
 			Player: event.Player,
 		}
+
+	case EndTurn:
+		uuid, err := uuid.Parse(event.Payload.(string))
+
+		if err != nil || uuid != g.Id {
+			return
+		}
+
+		g.EndTurn <- event.Player
 	}
 }
 

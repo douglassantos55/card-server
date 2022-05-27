@@ -250,6 +250,16 @@ func TestStartsTurnsWhenBothPlayersChoseHand(t *testing.T) {
 		if response.Type != StartTurn {
 			t.Errorf("Expected %v, got %v", StartTurn, response.Type)
 		}
+
+		payload := response.Payload.(TurnPayload)
+
+		if payload.Duration != 75*time.Second {
+			t.Errorf("Expected %v, got %v", 75*time.Second, payload.Duration)
+		}
+
+		if payload.GameId != game.Id {
+			t.Errorf("Expected %v, got %v", game.Id, payload.GameId)
+		}
 	}
 
 	select {
@@ -259,5 +269,98 @@ func TestStartsTurnsWhenBothPlayersChoseHand(t *testing.T) {
 		if response.Type != WaitTurn {
 			t.Errorf("Expected %v, got %v", WaitTurn, response.Type)
 		}
+	}
+}
+
+func TestTurnTimer(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(100 * time.Millisecond)
+
+	<-p1.Outgoing
+	<-p2.Outgoing
+
+	time.Sleep(200 * time.Millisecond)
+
+	select {
+	case response := <-p1.Outgoing:
+		if response.Type != WaitTurn {
+			t.Errorf("Expected %v, got %v", WaitTurn, response.Type)
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected turn to end")
+	}
+
+	select {
+	case response := <-p2.Outgoing:
+		if response.Type != StartTurn {
+			t.Errorf("Expected %v, got %v", StartTurn, response.Type)
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected turn to start")
+	}
+}
+
+func TestEndTurn(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	dispatcher := NewDispatcher()
+	game := NewGame([]*Player{p1, p2})
+
+	dispatcher.Register <- game
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing
+	<-p2.Outgoing
+
+	payload := res.Payload.(TurnPayload)
+
+	dispatcher.Dispatch <- Event{
+		Type:    EndTurn,
+		Player:  p1,
+		Payload: payload.GameId.String(),
+	}
+
+	select {
+	case response := <-p1.Outgoing:
+		if response.Type != WaitTurn {
+			t.Errorf("Expected %v, got %v", WaitTurn, response.Type)
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected turn to end")
+	}
+
+	select {
+	case response := <-p2.Outgoing:
+		if response.Type != StartTurn {
+			t.Errorf("Expected %v, got %v", StartTurn, response.Type)
+		}
+		payload := response.Payload.(TurnPayload)
+		if payload.Duration != time.Minute {
+			t.Errorf("Expected %v, got %v", time.Minute, payload.Duration)
+		}
+		if payload.GameId != game.Id {
+			t.Errorf("Expecetd %v, got %v", game.Id, payload.GameId)
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected turn to start")
+	}
+
+	dispatcher.Dispatch <- Event{
+		Type:    EndTurn,
+		Player:  p2,
+		Payload: payload.GameId.String(),
+	}
+
+	select {
+	case response := <-p1.Outgoing:
+		if response.Type != StartTurn {
+			t.Errorf("Expected %v, got %v", StartTurn, response.Type)
+		}
+	case <-time.After(time.Second):
+		t.Error("Expected turn to start")
 	}
 }

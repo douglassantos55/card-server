@@ -1,5 +1,11 @@
 package server
 
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
 type Response struct {
 	Type    ResponseType
 	Payload interface{}
@@ -18,3 +24,8 @@ const (
 	StartTurn        ResponseType = "start_turn"
 	WaitTurn         ResponseType = "wait_turn"
 )
+
+type TurnPayload struct {
+	GameId   uuid.UUID
+	Duration time.Duration
+}

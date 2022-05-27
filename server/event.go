@@ -16,4 +16,10 @@ const (
 	MatchDeclined   EventType = "match_declined"
 	AskConfirmation EventType = "confirm_match"
 	StartGame       EventType = "start_game"
+	CardsDiscarded  EventType = "cards_discarded"
 )
+
+type CardsDiscardedPayload struct {
+	GameId string
+	Cards  []string
+}

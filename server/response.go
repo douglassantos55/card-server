@@ -14,4 +14,7 @@ const (
 	Dequeued         ResponseType = "dequeued"
 	WaitOtherPlayers ResponseType = "wait_other_players"
 	MatchCanceled    ResponseType = "match_canceled"
+	StartingHand     ResponseType = "starting_hand"
+	StartTurn        ResponseType = "start_turn"
+	WaitTurn         ResponseType = "wait_turn"
 )

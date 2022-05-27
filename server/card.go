@@ -1,6 +1,9 @@
 package server
 
+import "github.com/google/uuid"
+
 type HasManaCost interface {
+	GetId() string
 	GetManaCost() int
 	ReduceManaCost(amount int)
 }
@@ -30,7 +33,12 @@ type HasHealth interface {
 }
 
 type Card struct {
+	Id       uuid.UUID
 	ManaCost int
+}
+
+func (c *Card) GetId() string {
+	return c.Id.String()
 }
 
 func (c *Card) GetManaCost() int {
@@ -53,6 +61,7 @@ type MinionCard struct {
 func NewMinion(manaCost, damage, health int) Minion {
 	return &MinionCard{
 		Card: Card{
+			Id:       uuid.New(),
 			ManaCost: manaCost,
 		},
 		Damage: damage,

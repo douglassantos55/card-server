@@ -2,8 +2,12 @@ package server
 
 import "github.com/google/uuid"
 
-type HasManaCost interface {
+type HasIdentity interface {
 	GetId() string
+}
+
+type HasManaCost interface {
+	HasIdentity
 	GetManaCost() int
 	ReduceManaCost(amount int)
 	IncreaseManaCost(amount int)
@@ -15,16 +19,15 @@ type Minion interface {
 }
 
 type Defender interface {
+	HasIdentity
 	HasDamage
 	HasHealth
-	CanCounterAttack() bool
 }
 
 type HasDamage interface {
 	GetDamage() int
 	GainDamage(amount int)
 	ReduceDamage(amount int)
-	Attack(defender Defender)
 }
 
 type HasHealth interface {
@@ -89,14 +92,6 @@ func (m *MinionCard) ReduceDamage(amount int) {
 	}
 }
 
-func (m *MinionCard) Attack(defender Defender) {
-	defender.ReduceHealth(m.GetDamage())
-
-	if defender.CanCounterAttack() {
-		m.ReduceHealth(defender.GetDamage())
-	}
-}
-
 func (m *MinionCard) GetHealth() int {
 	return m.Health
 }
@@ -110,8 +105,4 @@ func (m *MinionCard) ReduceHealth(amount int) {
 	if m.Health < 0 {
 		m.Health = 0
 	}
-}
-
-func (m *MinionCard) CanCounterAttack() bool {
-	return true
 }

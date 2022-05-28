@@ -84,18 +84,3 @@ func TestGainDamage(t *testing.T) {
 		t.Errorf("Expected %v, got %v", 12, card.GetDamage())
 	}
 }
-
-func TestAttack(t *testing.T) {
-	offender := NewMinion(2, 1, 2)
-	defender := NewMinion(2, 1, 2)
-
-	offender.Attack(defender)
-
-	if offender.GetHealth() != 1 {
-		t.Errorf("Expected %v, got %v", 1, offender.GetHealth())
-	}
-
-	if defender.GetHealth() != 1 {
-		t.Errorf("Expected %v, got %v", 1, defender.GetHealth())
-	}
-}

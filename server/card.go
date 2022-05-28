@@ -6,6 +6,7 @@ type HasManaCost interface {
 	GetId() string
 	GetManaCost() int
 	ReduceManaCost(amount int)
+	IncreaseManaCost(amount int)
 }
 
 type Minion interface {
@@ -50,6 +51,10 @@ func (c *Card) ReduceManaCost(amount int) {
 	if c.ManaCost < 0 {
 		c.ManaCost = 0
 	}
+}
+
+func (c *Card) IncreaseManaCost(amount int) {
+	c.ManaCost += amount
 }
 
 type MinionCard struct {

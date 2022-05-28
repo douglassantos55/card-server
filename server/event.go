@@ -18,9 +18,15 @@ const (
 	StartGame       EventType = "start_game"
 	CardsDiscarded  EventType = "cards_discarded"
 	EndTurn         EventType = "end_turn"
+	PlayCard        EventType = "play_card"
 )
 
 type CardsDiscardedPayload struct {
 	GameId string
 	Cards  []string
+}
+
+type PlayCardPayload struct {
+	GameId string
+	Card   string
 }

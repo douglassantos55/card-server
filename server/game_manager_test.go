@@ -279,8 +279,8 @@ func TestTurnTimer(t *testing.T) {
 	game := NewGame([]*Player{p1, p2})
 	go game.StartTurns(100 * time.Millisecond)
 
-	<-p1.Outgoing
-	<-p2.Outgoing
+	<-p1.Outgoing // start turn
+	<-p2.Outgoing // wait turn
 
 	time.Sleep(200 * time.Millisecond)
 
@@ -389,5 +389,178 @@ func TestDrawsCardOnTurnStart(t *testing.T) {
 		if payload.Card == nil {
 			t.Error("Expected card to be drawn")
 		}
+	}
+}
+
+func TestPlayCard(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	dispatcher := NewDispatcher()
+	game := NewGame([]*Player{p1, p2})
+
+	dispatcher.Register <- game
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing
+	<-p2.Outgoing
+
+	payload := res.Payload.(TurnPayload)
+
+	// reduce all of it so we can actually play any card
+	payload.Card.ReduceManaCost(100)
+
+	dispatcher.Dispatch <- Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			Card:   payload.Card.GetId(),
+			GameId: game.Id.String(),
+		},
+	}
+
+	select {
+	case response := <-p2.Outgoing:
+		if response.Type != CardPlayed {
+			t.Errorf("Expected %v, got %v", CardPlayed, response.Type)
+		}
+
+		got := response.Payload.(HasManaCost)
+
+		if got != payload.Card {
+			t.Errorf("Expected %v, got %v", payload.Card, got)
+		}
+	}
+}
+
+func TestGainsManaOnTurnStart(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(100 * time.Millisecond)
+
+	res := <-p1.Outgoing
+	<-p2.Outgoing // wait turn
+
+	payload := res.Payload.(TurnPayload)
+
+	if payload.Mana != 1 {
+		t.Errorf("Expected %v, got %v", 1, payload.Mana)
+	}
+
+	// wait turn end
+	time.Sleep(100 * time.Millisecond)
+
+	<-p1.Outgoing // wait turn
+	res2 := <-p2.Outgoing
+
+	payload2 := res2.Payload.(TurnPayload)
+	if payload2.Mana != 1 {
+		t.Errorf("Expected %v, got %v", 1, payload2.Mana)
+	}
+
+	// wait turn end
+	time.Sleep(100 * time.Millisecond)
+
+	res3 := <-p1.Outgoing
+	<-p2.Outgoing // wait turn
+
+	payload3 := res3.Payload.(TurnPayload)
+
+	if payload3.Mana != 2 {
+		t.Errorf("Expected %v, got %v", 2, payload3.Mana)
+	}
+}
+
+func TestCannotPlayCardWithManaCostHigherThanCurrentMana(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	dispatcher := NewDispatcher()
+	game := NewGame([]*Player{p1, p2})
+
+	dispatcher.Register <- game
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing // start turn
+	<-p2.Outgoing        // wait turn
+
+	payload := res.Payload.(TurnPayload)
+
+	payload.Card.IncreaseManaCost(100)
+
+	dispatcher.Dispatch <- Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}
+
+	select {
+	case <-time.After(time.Second):
+		t.Error("Expected error response")
+	case res := <-p1.Outgoing:
+		if res.Type != Error {
+			t.Errorf("Expected %v, got %v", Error, res.Type)
+		}
+
+		expected := "Not enough mana"
+		received := res.Payload.(string)
+
+		if received != expected {
+			t.Errorf("Expected '%v', got '%v'", expected, received)
+		}
+	}
+}
+
+func TestPlayedCardIsRemovedFromHand(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing // start turn
+	<-p2.Outgoing        // wait turn
+
+	payload := res.Payload.(TurnPayload)
+	payload.Card.ReduceManaCost(100)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}, nil)
+
+	<-p2.Outgoing // card played
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p1,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing // wait turn
+	<-p2.Outgoing // start turn
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p2,
+		Payload: game.Id.String(),
+	}, nil)
+
+	res2 := <-p1.Outgoing // start turn
+	<-p2.Outgoing         // wait turn
+
+	payload2 := res2.Payload.(TurnPayload)
+
+	if payload2.CardsInHand != 4 {
+		t.Errorf("Expected %v, got %v", 4, payload2.CardsInHand)
 	}
 }

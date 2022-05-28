@@ -53,6 +53,7 @@ type GamePlayer struct {
 	player *Player
 
 	Deck *Deck
+	Mana int
 	Hand []HasManaCost
 
 	Current bool
@@ -60,6 +61,10 @@ type GamePlayer struct {
 
 func (gp *GamePlayer) Send(response Response) {
 	gp.player.Send(response)
+}
+
+func (gp *GamePlayer) GainMana() {
+	gp.Mana++
 }
 
 type Game struct {
@@ -71,6 +76,7 @@ type Game struct {
 	Discard   chan Discarded
 	Started   chan time.Duration
 	StartTurn chan time.Duration
+	PlayCard  chan PlayCardPayload
 }
 
 func NewGame(players []*Player) *Game {
@@ -96,6 +102,7 @@ func NewGame(players []*Player) *Game {
 		Started:   make(chan time.Duration),
 		Discard:   make(chan Discarded),
 		StartTurn: make(chan time.Duration),
+		PlayCard:  make(chan PlayCardPayload),
 	}
 
 	go func() {
@@ -146,14 +153,20 @@ func NewGame(players []*Player) *Game {
 			case duration := <-game.StartTurn:
 				for _, player := range game.Players {
 					if player.Current {
+						player.GainMana()
+
 						card := player.Deck.Draw()
+						player.Hand = append(player.Hand, card)
+
 						go player.Send(Response{
 							Type: StartTurn,
 							Payload: TurnPayload{
-								GameId:    game.Id,
-								CardsLeft: player.Deck.Count(),
-								Card:      card,
-								Duration:  duration,
+								GameId:      game.Id,
+								CardsLeft:   player.Deck.Count(),
+								Card:        card,
+								CardsInHand: len(player.Hand),
+								Mana:        player.Mana,
+								Duration:    duration,
 							},
 						})
 					} else {
@@ -161,19 +174,66 @@ func NewGame(players []*Player) *Game {
 							Type: WaitTurn,
 						})
 					}
-					player.Current = !player.Current
 				}
 
 				go func() {
 					select {
 					case <-time.After(duration):
+						for _, player := range game.Players {
+							player.Current = !player.Current
+						}
 						game.StartTurn <- duration
 						break
 					case <-game.EndTurn:
+						for _, player := range game.Players {
+							player.Current = !player.Current
+						}
 						game.StartTurn <- duration
 						break
 					}
 				}()
+
+			case data := <-game.PlayCard:
+				var card HasManaCost
+
+				var other *GamePlayer
+				var current *GamePlayer
+
+				for _, player := range game.Players {
+					for idx, c := range player.Hand {
+						if c.GetId() == data.Card {
+							card = c
+
+							player.Hand = append(
+								player.Hand[:idx],
+								player.Hand[idx+1:]...,
+							)
+						}
+					}
+					if !player.Current {
+						other = player
+					} else {
+						current = player
+					}
+				}
+
+				if card == nil {
+					current.Send(Response{
+						Type:    Error,
+						Payload: "Card not found",
+					})
+				}
+				if card.GetManaCost() > current.Mana {
+					current.Send(Response{
+						Type:    Error,
+						Payload: "Not enough mana",
+					})
+				}
+
+				other.Send(Response{
+					Type:    CardPlayed,
+					Payload: card,
+				})
 			}
 		}
 	}()
@@ -218,6 +278,15 @@ func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 		}
 
 		g.EndTurn <- event.Player
+	case PlayCard:
+		data := event.Payload.(PlayCardPayload)
+		uuid, err := uuid.Parse(data.GameId)
+
+		if err != nil || uuid != g.Id {
+			return
+		}
+
+		g.PlayCard <- data
 	}
 }
 

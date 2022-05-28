@@ -23,11 +23,16 @@ const (
 	StartingHand     ResponseType = "starting_hand"
 	StartTurn        ResponseType = "start_turn"
 	WaitTurn         ResponseType = "wait_turn"
+	CardPlayed       ResponseType = "card_played"
+
+	Error ResponseType = "error"
 )
 
 type TurnPayload struct {
-	GameId    uuid.UUID
-	Duration  time.Duration
-	Card      HasManaCost
-	CardsLeft int
+	GameId      uuid.UUID
+	Duration    time.Duration
+	Card        HasManaCost
+	Mana        int
+	CardsLeft   int
+	CardsInHand int
 }

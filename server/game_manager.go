@@ -64,8 +64,8 @@ func (gp *GamePlayer) Send(response Response) {
 	gp.player.Send(response)
 }
 
-func (gp *GamePlayer) IncreaseMana() {
-	gp.MaxMana++
+func (gp *GamePlayer) IncreaseMana(amount int) {
+	gp.MaxMana += amount
 	if gp.MaxMana > 10 {
 		gp.MaxMana = 10
 	}
@@ -177,7 +177,7 @@ func NewGame(players []*Player) *Game {
 			case duration := <-game.StartTurn:
 				for _, player := range game.Players {
 					if player.Current {
-						player.IncreaseMana()
+						player.IncreaseMana(1)
 						player.RefillMana()
 
 						card := player.Deck.Draw()

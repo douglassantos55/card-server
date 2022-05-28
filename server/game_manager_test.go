@@ -680,3 +680,32 @@ func TestRefillsManaOnTurnStart(t *testing.T) {
 		t.Errorf("Expected %v, got %v", 3, payload2.Mana)
 	}
 }
+
+func TestCapManaTo10(t *testing.T) {
+	player := &GamePlayer{}
+
+	player.IncreaseMana(8)
+	if player.MaxMana != 8 {
+		t.Errorf("Expected %v, got %v", 8, player.MaxMana)
+	}
+
+	player.IncreaseMana(100)
+	if player.MaxMana != 10 {
+		t.Errorf("Expected %v, got %v", 10, player.MaxMana)
+	}
+
+	player.GainMana(300)
+	if player.Mana != 10 {
+		t.Errorf("Expected %v, got %v", 10, player.Mana)
+	}
+
+	player.ConsumeMana(1000)
+	if player.Mana != 0 {
+		t.Errorf("Expected %v, got %v", 0, player.Mana)
+	}
+
+	player.RefillMana()
+	if player.Mana != 10 {
+		t.Errorf("Expected %v, got %v", 10, player.Mana)
+	}
+}

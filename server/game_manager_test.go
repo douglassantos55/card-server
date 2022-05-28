@@ -282,7 +282,7 @@ func TestTurnTimer(t *testing.T) {
 	<-p1.Outgoing // start turn
 	<-p2.Outgoing // wait turn
 
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	select {
 	case response := <-p1.Outgoing:
@@ -627,5 +627,56 @@ func TestPlayingCardsUsesMana(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	case res := <-p2.Outgoing:
 		t.Errorf("Should not receive, got %v", res)
+	}
+}
+
+func TestRefillsManaOnTurnStart(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(100 * time.Millisecond)
+
+	<-p1.Outgoing // start turn
+	<-p2.Outgoing // wait turn
+
+	time.Sleep(100 * time.Millisecond)
+
+	<-p1.Outgoing // wait turn
+	<-p2.Outgoing // start turn
+
+	time.Sleep(100 * time.Millisecond)
+
+	res := <-p1.Outgoing // start turn
+	<-p2.Outgoing        // wait turn
+
+	payload := res.Payload.(TurnPayload)
+	payload.Card.ReduceManaCost(payload.Card.GetManaCost() - 2)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}, nil)
+
+	<-p2.Outgoing // card played
+
+	time.Sleep(100 * time.Millisecond)
+
+	<-p1.Outgoing // wait turn
+	<-p2.Outgoing // start turn
+
+	time.Sleep(100 * time.Millisecond)
+
+	res2 := <-p1.Outgoing // start turn
+	<-p2.Outgoing         // wait turn
+
+	payload2 := res2.Payload.(TurnPayload)
+
+	if payload2.Mana != 3 {
+		t.Errorf("Expected %v, got %v", 3, payload2.Mana)
 	}
 }

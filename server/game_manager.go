@@ -52,9 +52,10 @@ type Discarded struct {
 type GamePlayer struct {
 	player *Player
 
-	Deck *Deck
-	Mana int
-	Hand []HasManaCost
+	Deck    *Deck
+	Mana    int
+	MaxMana int
+	Hand    []HasManaCost
 
 	Current bool
 }
@@ -63,8 +64,22 @@ func (gp *GamePlayer) Send(response Response) {
 	gp.player.Send(response)
 }
 
-func (gp *GamePlayer) GainMana() {
-	gp.Mana++
+func (gp *GamePlayer) IncreaseMana() {
+	gp.MaxMana++
+	if gp.MaxMana > 10 {
+		gp.MaxMana = 10
+	}
+}
+
+func (gp *GamePlayer) GainMana(amount int) {
+	gp.Mana += amount
+	if gp.Mana > gp.MaxMana {
+		gp.Mana = gp.MaxMana
+	}
+}
+
+func (gp *GamePlayer) RefillMana() {
+	gp.Mana = gp.MaxMana
 }
 
 func (gp *GamePlayer) ConsumeMana(amount int) {
@@ -83,6 +98,7 @@ type Game struct {
 	Discard   chan Discarded
 	Started   chan time.Duration
 	StartTurn chan time.Duration
+	TurnOver  chan time.Duration
 	PlayCard  chan PlayCardPayload
 }
 
@@ -109,6 +125,7 @@ func NewGame(players []*Player) *Game {
 		Started:   make(chan time.Duration),
 		Discard:   make(chan Discarded),
 		StartTurn: make(chan time.Duration),
+		TurnOver:  make(chan time.Duration),
 		PlayCard:  make(chan PlayCardPayload),
 	}
 
@@ -160,7 +177,8 @@ func NewGame(players []*Player) *Game {
 			case duration := <-game.StartTurn:
 				for _, player := range game.Players {
 					if player.Current {
-						player.GainMana()
+						player.IncreaseMana()
+						player.RefillMana()
 
 						card := player.Deck.Draw()
 						player.Hand = append(player.Hand, card)
@@ -186,20 +204,16 @@ func NewGame(players []*Player) *Game {
 				go func() {
 					select {
 					case <-time.After(duration):
-						for _, player := range game.Players {
-							player.Current = !player.Current
-						}
-						game.StartTurn <- duration
-						break
+						game.TurnOver <- duration
 					case <-game.EndTurn:
-						for _, player := range game.Players {
-							player.Current = !player.Current
-						}
-						game.StartTurn <- duration
-						break
+						game.TurnOver <- duration
 					}
 				}()
-
+			case duration := <-game.TurnOver:
+				for _, player := range game.Players {
+					player.Current = !player.Current
+				}
+				go game.StartTurns(duration)
 			case data := <-game.PlayCard:
 				var index int
 				var card HasManaCost

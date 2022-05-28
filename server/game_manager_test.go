@@ -564,3 +564,68 @@ func TestPlayedCardIsRemovedFromHand(t *testing.T) {
 		t.Errorf("Expected %v, got %v", 4, payload2.CardsInHand)
 	}
 }
+
+func TestPlayingCardsUsesMana(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.Start(100 * time.Millisecond)
+
+	res := <-p1.Outgoing // starting hand
+	<-p2.Outgoing        // starting hand
+
+	hand := res.Payload.([]HasManaCost)
+
+	// start turns
+	time.Sleep(110 * time.Millisecond)
+
+	turn := <-p1.Outgoing // start turn
+	<-p2.Outgoing         // wait turn
+
+	payload := turn.Payload.(TurnPayload)
+	payload.Card.ReduceManaCost(payload.Card.GetManaCost() - 1)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}, nil)
+
+	<-p2.Outgoing // card played
+
+	hand[0].ReduceManaCost(hand[0].GetManaCost() - 1)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   hand[0].GetId(),
+		},
+	}, nil)
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Expected error response")
+	case res := <-p1.Outgoing:
+		if res.Type != Error {
+			t.Errorf("Expected %v, got %v", Error, res.Type)
+		}
+		expected := "Not enough mana"
+		received := res.Payload.(string)
+
+		if received != expected {
+			t.Errorf("Expected %v, got %v", expected, received)
+		}
+	}
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case res := <-p2.Outgoing:
+		t.Errorf("Should not receive, got %v", res)
+	}
+}

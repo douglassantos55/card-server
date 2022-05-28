@@ -67,6 +67,13 @@ func (gp *GamePlayer) GainMana() {
 	gp.Mana++
 }
 
+func (gp *GamePlayer) ConsumeMana(amount int) {
+	gp.Mana -= amount
+	if gp.Mana < 0 {
+		gp.Mana = 0
+	}
+}
+
 type Game struct {
 	Id      uuid.UUID
 	Ready   []*Player
@@ -194,6 +201,7 @@ func NewGame(players []*Player) *Game {
 				}()
 
 			case data := <-game.PlayCard:
+				var index int
 				var card HasManaCost
 
 				var other *GamePlayer
@@ -203,11 +211,8 @@ func NewGame(players []*Player) *Game {
 					for idx, c := range player.Hand {
 						if c.GetId() == data.Card {
 							card = c
+							index = idx
 
-							player.Hand = append(
-								player.Hand[:idx],
-								player.Hand[idx+1:]...,
-							)
 						}
 					}
 					if !player.Current {
@@ -222,18 +227,24 @@ func NewGame(players []*Player) *Game {
 						Type:    Error,
 						Payload: "Card not found",
 					})
-				}
-				if card.GetManaCost() > current.Mana {
+				} else if card.GetManaCost() > current.Mana {
 					current.Send(Response{
 						Type:    Error,
 						Payload: "Not enough mana",
 					})
-				}
+				} else {
+					current.Hand = append(
+						current.Hand[:index],
+						current.Hand[index+1:]...,
+					)
 
-				other.Send(Response{
-					Type:    CardPlayed,
-					Payload: card,
-				})
+					current.ConsumeMana(card.GetManaCost())
+
+					other.Send(Response{
+						Type:    CardPlayed,
+						Payload: card,
+					})
+				}
 			}
 		}
 	}()

@@ -24,6 +24,7 @@ const (
 	StartTurn        ResponseType = "start_turn"
 	WaitTurn         ResponseType = "wait_turn"
 	CardPlayed       ResponseType = "card_played"
+	AttackResult     ResponseType = "attack_result"
 
 	Error ResponseType = "error"
 )

@@ -34,7 +34,7 @@ func (t *Exhausted) CanAttack() bool {
 }
 
 func (t *Exhausted) CanCounterAttack() bool {
-	return false
+	return true
 }
 
 type Ready struct{}

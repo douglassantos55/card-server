@@ -34,6 +34,8 @@ func (d *Deck) Add(card HasManaCost) {
 }
 
 func NewDeck() *Deck {
+	rand.Seed(time.Now().UnixNano())
+
 	var cards []HasManaCost
 	for i := 0; i < 60; i++ {
 		cards = append(
@@ -55,6 +57,7 @@ type GamePlayer struct {
 	Deck    *Deck
 	Mana    int
 	MaxMana int
+	Board   *Board
 	Hand    []HasManaCost
 
 	Current bool
@@ -100,6 +103,7 @@ type Game struct {
 	StartTurn chan time.Duration
 	TurnOver  chan time.Duration
 	PlayCard  chan PlayCardPayload
+	Attack    chan AttackPayload
 }
 
 func NewGame(players []*Player) *Game {
@@ -112,6 +116,7 @@ func NewGame(players []*Player) *Game {
 			player:  player,
 			Deck:    deck,
 			Current: idx == 0,
+			Board:   NewBoard(),
 			Hand:    deck.DrawMany(3),
 		}
 	}
@@ -127,6 +132,7 @@ func NewGame(players []*Player) *Game {
 		StartTurn: make(chan time.Duration),
 		TurnOver:  make(chan time.Duration),
 		PlayCard:  make(chan PlayCardPayload),
+		Attack:    make(chan AttackPayload),
 	}
 
 	go func() {
@@ -182,6 +188,10 @@ func NewGame(players []*Player) *Game {
 
 						card := player.Deck.Draw()
 						player.Hand = append(player.Hand, card)
+
+						for _, minion := range player.Board.Defenders {
+							minion.SetStatus(&Ready{})
+						}
 
 						go player.Send(Response{
 							Type: StartTurn,
@@ -253,12 +263,61 @@ func NewGame(players []*Player) *Game {
 					)
 
 					current.ConsumeMana(card.GetManaCost())
+					played := current.Board.PlaceCard(card.(Defender))
 
 					other.Send(Response{
 						Type:    CardPlayed,
-						Payload: card,
+						Payload: played,
 					})
 				}
+			case data := <-game.Attack:
+				var current *GamePlayer
+				var other *GamePlayer
+
+				for _, player := range game.Players {
+					if player.Current {
+						current = player
+					} else {
+						other = player
+					}
+				}
+
+				var attacker ActiveDefender
+				var defender ActiveDefender
+
+				for _, card := range current.Board.Defenders {
+					if card.GetId() == data.Attacker {
+						attacker = card.(ActiveDefender)
+						break
+					}
+				}
+
+				for _, card := range other.Board.Defenders {
+					if card.GetId() == data.Target {
+						defender = card.(ActiveDefender)
+						break
+					}
+				}
+
+				if attacker.CanAttack() {
+					attacker.Attack(defender)
+				}
+
+				current.Send(Response{
+					Type: AttackResult,
+					Payload: []*Board{
+						current.Board,
+						other.Board,
+					},
+				})
+
+				other.Send(Response{
+					Type: AttackResult,
+					Payload: []*Board{
+						other.Board,
+						current.Board,
+					},
+				})
 			}
 		}
 	}()
@@ -312,6 +371,15 @@ func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 		}
 
 		g.PlayCard <- data
+	case Attack:
+		data := event.Payload.(AttackPayload)
+		uuid, err := uuid.Parse(data.GameId)
+
+		if err != nil || uuid != g.Id {
+			return
+		}
+
+		g.Attack <- data
 	}
 }
 

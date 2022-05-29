@@ -82,4 +82,3 @@ func TestFrozenCannotAttack(t *testing.T) {
 		t.Error("Frozen should be able to counter-attack")
 	}
 }
-

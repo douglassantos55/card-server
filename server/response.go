@@ -25,6 +25,7 @@ const (
 	WaitTurn         ResponseType = "wait_turn"
 	CardPlayed       ResponseType = "card_played"
 	AttackResult     ResponseType = "attack_result"
+	DamageTaken      ResponseType = "damage_taken"
 
 	Error ResponseType = "error"
 )
@@ -36,4 +37,9 @@ type TurnPayload struct {
 	Mana        int
 	CardsLeft   int
 	CardsInHand int
+}
+
+type DamageTakenPayload struct {
+	Health   int
+	PlayerId string
 }

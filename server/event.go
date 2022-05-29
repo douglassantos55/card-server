@@ -20,6 +20,7 @@ const (
 	EndTurn         EventType = "end_turn"
 	PlayCard        EventType = "play_card"
 	Attack          EventType = "attack"
+	AttackPlayer    EventType = "attack_player"
 )
 
 type CardsDiscardedPayload struct {

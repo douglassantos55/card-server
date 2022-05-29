@@ -55,12 +55,23 @@ type GamePlayer struct {
 	player *Player
 
 	Deck    *Deck
+	Health  int
 	Mana    int
 	MaxMana int
 	Board   *Board
 	Hand    []HasManaCost
 
 	Current bool
+}
+
+func (gp *GamePlayer) GetHealth() int {
+	return gp.Health
+}
+func (gp *GamePlayer) GainHealth(amount int) {
+	gp.Health += amount
+}
+func (gp *GamePlayer) ReduceHealth(amount int) {
+	gp.Health -= amount
 }
 
 func (gp *GamePlayer) Send(response Response) {
@@ -114,6 +125,7 @@ func NewGame(players []*Player) *Game {
 
 		gamePlayers[player] = &GamePlayer{
 			player:  player,
+			Health:  30,
 			Deck:    deck,
 			Current: idx == 0,
 			Board:   NewBoard(),
@@ -227,8 +239,6 @@ func NewGame(players []*Player) *Game {
 			case data := <-game.PlayCard:
 				var index int
 				var card HasManaCost
-
-				var other *GamePlayer
 				var current *GamePlayer
 
 				for _, player := range game.Players {
@@ -239,9 +249,7 @@ func NewGame(players []*Player) *Game {
 
 						}
 					}
-					if !player.Current {
-						other = player
-					} else {
+					if player.Current {
 						current = player
 					}
 				}
@@ -265,10 +273,12 @@ func NewGame(players []*Player) *Game {
 					current.ConsumeMana(card.GetManaCost())
 					played := current.Board.PlaceCard(card.(Defender))
 
-					other.Send(Response{
-						Type:    CardPlayed,
-						Payload: played,
-					})
+					for _, player := range game.Players {
+						go player.Send(Response{
+							Type:    CardPlayed,
+							Payload: played,
+						})
+					}
 				}
 			case data := <-game.Attack:
 				var current *GamePlayer
@@ -292,44 +302,62 @@ func NewGame(players []*Player) *Game {
 					}
 				}
 
-				for _, card := range other.Board.Defenders {
-					if card.GetId() == data.Target {
-						defender = card.(ActiveDefender)
-						break
+				if data.Target != "" {
+					for _, card := range other.Board.Defenders {
+						if card.GetId() == data.Target {
+							defender = card.(ActiveDefender)
+							break
+						}
 					}
-				}
 
-				if attacker.CanAttack() {
-					attacker.Attack(defender)
+					if attacker.CanAttack() {
+						attacker.Attack(defender)
+
+						if attacker.GetHealth() == 0 {
+							current.Board.Remove(attacker)
+						}
+						if defender.GetHealth() == 0 {
+							other.Board.Remove(defender)
+						}
+
+						current.Send(Response{
+							Type: AttackResult,
+							Payload: []*Board{
+								current.Board,
+								other.Board,
+							},
+						})
+
+						other.Send(Response{
+							Type: AttackResult,
+							Payload: []*Board{
+								other.Board,
+								current.Board,
+							},
+						})
+					} else {
+						current.Send(Response{
+							Type:    Error,
+							Payload: "Cannot attack with this card",
+						})
+					}
+				} else if len(other.Board.Defenders) == 0 {
+					other.ReduceHealth(attacker.GetDamage())
+
+					for _, player := range game.Players {
+						player.Send(Response{
+							Type: DamageTaken,
+							Payload: DamageTakenPayload{
+								Health: other.GetHealth(),
+							},
+						})
+					}
 				} else {
 					current.Send(Response{
 						Type:    Error,
-						Payload: "Cannot attack with this card",
+						Payload: "Cannot attack player with minions on board",
 					})
 				}
-
-				if attacker.GetHealth() == 0 {
-					current.Board.Remove(attacker)
-				}
-				if defender.GetHealth() == 0 {
-					other.Board.Remove(defender)
-				}
-
-				current.Send(Response{
-					Type: AttackResult,
-					Payload: []*Board{
-						current.Board,
-						other.Board,
-					},
-				})
-
-				other.Send(Response{
-					Type: AttackResult,
-					Payload: []*Board{
-						other.Board,
-						current.Board,
-					},
-				})
 			}
 		}
 	}()
@@ -383,7 +411,7 @@ func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 		}
 
 		g.PlayCard <- data
-	case Attack:
+	case Attack, AttackPlayer:
 		data := event.Payload.(AttackPayload)
 		uuid, err := uuid.Parse(data.GameId)
 

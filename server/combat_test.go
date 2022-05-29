@@ -45,8 +45,8 @@ func TestCanAttackEnemies(t *testing.T) {
 		t.Errorf("Expected %v, got %v", 0, defender.GetHealth())
 	}
 
-	if attacker.GetHealth() != 1 {
-		t.Errorf("Expected %v, got %v", 1, attacker.GetHealth())
+	if attacker.GetHealth() != 2 {
+		t.Errorf("Expected %v, got %v", 2, attacker.GetHealth())
 	}
 }
 

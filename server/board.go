@@ -1,13 +1,17 @@
 package server
 
 type Board struct {
-	Defenders []ActiveDefender
+	Defenders map[string]ActiveDefender
 }
 
 func NewBoard() *Board {
 	return &Board{
-		Defenders: make([]ActiveDefender, 0),
+		Defenders: make(map[string]ActiveDefender),
 	}
+}
+
+func (b *Board) Remove(minion Defender) {
+	delete(b.Defenders, minion.GetId())
 }
 
 type Status interface {
@@ -85,7 +89,7 @@ func (t *ActiveMinion) Attack(defender ActiveDefender) {
 
 	defender.ReduceHealth(t.GetDamage())
 
-	if defender.CanCounterAttack() {
+	if defender.GetHealth() > 0 && defender.CanCounterAttack() {
 		t.ReduceHealth(defender.GetDamage())
 	}
 
@@ -102,6 +106,6 @@ func (b *Board) PlaceCard(card Defender) ActiveDefender {
 		Status:   &Exhausted{},
 	}
 
-	b.Defenders = append(b.Defenders, defender)
+	b.Defenders[defender.GetId()] = defender
 	return defender
 }

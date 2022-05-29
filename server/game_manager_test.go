@@ -732,7 +732,127 @@ func TestAttackCards(t *testing.T) {
 	attacker.ReduceHealth(100)
 	attacker.ReduceDamage(100)
 
-	attacker.GainDamage(3)
+	attacker.GainDamage(2)
+	attacker.GainHealth(2)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}, nil)
+
+	<-p2.Outgoing // card played
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p1,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing         // wait turn
+	res2 := <-p2.Outgoing // start turn
+
+	payload2 := res2.Payload.(TurnPayload)
+
+	defender := payload2.Card.(Minion)
+	defender.ReduceManaCost(100)
+	defender.ReduceDamage(defender.GetDamage() - 1)
+	defender.ReduceHealth(defender.GetHealth() - 3)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p2,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload2.Card.GetId(),
+		},
+	}, nil)
+
+	<-p1.Outgoing // card played
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p2,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing // start turn
+	<-p2.Outgoing // wait turn
+
+	go game.Process(Event{
+		Type:   Attack,
+		Player: p1,
+		Payload: AttackPayload{
+			GameId:   game.Id.String(),
+			Attacker: payload.Card.GetId(),
+			Target:   payload2.Card.GetId(),
+		},
+	}, nil)
+
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Expected attack result")
+	case res := <-p1.Outgoing:
+		if res.Type != AttackResult {
+			t.Errorf("Expected %v, got %v", AttackResult, res.Type)
+		}
+
+		boards := res.Payload.([]*Board)
+
+		attacker := boards[0].Defenders[attacker.GetId()]
+		if attacker.GetHealth() != 1 {
+			t.Errorf("Expected %v, got %v", 1, attacker.GetHealth())
+		}
+
+		defender := boards[1].Defenders[defender.GetId()]
+		if defender.GetHealth() != 1 {
+			t.Errorf("Expected %v, got %v", 1, defender.GetHealth())
+		}
+	}
+
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Expected attack result")
+	case res := <-p2.Outgoing:
+		if res.Type != AttackResult {
+			t.Errorf("Expected %v, got %v", AttackResult, res.Type)
+		}
+
+		boards := res.Payload.([]*Board)
+		attacker := boards[1].Defenders[attacker.GetId()]
+		if attacker.GetHealth() != 1 {
+			t.Errorf("Expected %v, got %v", 1, attacker.GetHealth())
+		}
+
+		defender := boards[0].Defenders[defender.GetId()]
+		if defender.GetHealth() != 1 {
+			t.Errorf("Expected %v, got %v", 1, defender.GetHealth())
+		}
+	}
+}
+
+func TestDestroysDefender(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing // start turn
+	<-p2.Outgoing        // wait turn
+
+	payload := res.Payload.(TurnPayload)
+
+	attacker := payload.Card.(Minion)
+
+	attacker.ReduceManaCost(100)
+	attacker.ReduceHealth(100)
+	attacker.ReduceDamage(100)
+
+	attacker.GainDamage(2)
 	attacker.GainHealth(2)
 
 	go game.Process(Event{
@@ -802,14 +922,13 @@ func TestAttackCards(t *testing.T) {
 
 		boards := res.Payload.([]*Board)
 
-		attacker := boards[0].Defenders[0]
-		if attacker.GetHealth() != 1 {
-			t.Errorf("Expected %v, got %v", 1, attacker.GetHealth())
+		attacker := boards[0].Defenders[attacker.GetId()]
+		if attacker.GetHealth() != 2 {
+			t.Errorf("Expected %v, got %v", 2, attacker.GetHealth())
 		}
 
-		defender := boards[1].Defenders[0]
-		if defender.GetHealth() != 0 {
-			t.Errorf("Expected %v, got %v", 0, defender.GetHealth())
+		if len(boards[1].Defenders) != 0 {
+			t.Errorf("Expected %v cards, got %v", 0, len(boards[1].Defenders))
 		}
 	}
 
@@ -822,14 +941,132 @@ func TestAttackCards(t *testing.T) {
 		}
 
 		boards := res.Payload.([]*Board)
-		attacker := boards[1].Defenders[0]
-		if attacker.GetHealth() != 1 {
-			t.Errorf("Expected %v, got %v", 1, attacker.GetHealth())
+
+		if len(boards[0].Defenders) != 0 {
+			t.Errorf("Expected %v cards, got %v", 0, len(boards[1].Defenders))
 		}
 
-		defender := boards[0].Defenders[0]
-		if defender.GetHealth() != 0 {
-			t.Errorf("Expected %v, got %v", 0, defender.GetHealth())
+		attacker := boards[1].Defenders[attacker.GetId()]
+		if attacker.GetHealth() != 2 {
+			t.Errorf("Expected %v, got %v", 2, attacker.GetHealth())
+		}
+	}
+}
+
+func TestDestroysAttacker(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing // start turn
+	<-p2.Outgoing        // wait turn
+
+	payload := res.Payload.(TurnPayload)
+
+	attacker := payload.Card.(Minion)
+
+	attacker.ReduceManaCost(100)
+	attacker.ReduceHealth(100)
+	attacker.ReduceDamage(100)
+
+	attacker.GainDamage(1)
+	attacker.GainHealth(1)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}, nil)
+
+	<-p2.Outgoing // card played
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p1,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing         // wait turn
+	res2 := <-p2.Outgoing // start turn
+
+	payload2 := res2.Payload.(TurnPayload)
+
+	defender := payload2.Card.(Minion)
+	defender.ReduceManaCost(100)
+	defender.ReduceDamage(defender.GetDamage() - 2)
+	defender.ReduceHealth(defender.GetHealth() - 2)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p2,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload2.Card.GetId(),
+		},
+	}, nil)
+
+	<-p1.Outgoing // card played
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p2,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing // start turn
+	<-p2.Outgoing // wait turn
+
+	go game.Process(Event{
+		Type:   Attack,
+		Player: p1,
+		Payload: AttackPayload{
+			GameId:   game.Id.String(),
+			Attacker: payload.Card.GetId(),
+			Target:   payload2.Card.GetId(),
+		},
+	}, nil)
+
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Expected attack result")
+	case res := <-p1.Outgoing:
+		if res.Type != AttackResult {
+			t.Errorf("Expected %v, got %v", AttackResult, res.Type)
+		}
+
+		boards := res.Payload.([]*Board)
+		if len(boards[0].Defenders) != 0 {
+			t.Errorf("Expected %v cards, got %v", 0, len(boards[1].Defenders))
+		}
+
+		defender := boards[1].Defenders[defender.GetId()]
+		if defender.GetHealth() != 1 {
+			t.Errorf("Expected %v, got %v", 1, defender.GetHealth())
+		}
+	}
+
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Expected attack result")
+	case res := <-p2.Outgoing:
+		if res.Type != AttackResult {
+			t.Errorf("Expected %v, got %v", AttackResult, res.Type)
+		}
+
+		boards := res.Payload.([]*Board)
+
+		defender := boards[0].Defenders[defender.GetId()]
+		if defender.GetHealth() != 1 {
+			t.Errorf("Expected %v, got %v", 1, defender.GetHealth())
+		}
+
+		if len(boards[1].Defenders) != 0 {
+			t.Errorf("Expected %v cards, got %v", 0, len(boards[1].Defenders))
 		}
 	}
 }

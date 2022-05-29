@@ -301,6 +301,18 @@ func NewGame(players []*Player) *Game {
 
 				if attacker.CanAttack() {
 					attacker.Attack(defender)
+				} else {
+					current.Send(Response{
+						Type:    Error,
+						Payload: "Cannot attack with this card",
+					})
+				}
+
+				if attacker.GetHealth() == 0 {
+					current.Board.Remove(attacker)
+				}
+				if defender.GetHealth() == 0 {
+					other.Board.Remove(defender)
 				}
 
 				current.Send(Response{

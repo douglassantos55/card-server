@@ -1277,3 +1277,90 @@ func TestCannotAttackPlayerIfThereAreMinionsOnBoard(t *testing.T) {
 		}
 	}
 }
+
+func TestGameOver(t *testing.T) {
+	p1 := NewTestPlayer()
+	p2 := NewTestPlayer()
+
+	game := NewGame([]*Player{p1, p2})
+	go game.StartTurns(time.Minute)
+
+	res := <-p1.Outgoing // start turn
+	<-p2.Outgoing        // wait turn
+
+	payload := res.Payload.(TurnPayload)
+	payload.Card.ReduceManaCost(payload.Card.GetManaCost() - 1)
+	payload.Card.(Defender).GainDamage(30)
+
+	go game.Process(Event{
+		Type:   PlayCard,
+		Player: p1,
+		Payload: PlayCardPayload{
+			GameId: game.Id.String(),
+			Card:   payload.Card.GetId(),
+		},
+	}, nil)
+
+	<-p1.Outgoing
+	<-p2.Outgoing
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p1,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing // wait turn
+	<-p2.Outgoing // start turn
+
+	go game.Process(Event{
+		Type:    EndTurn,
+		Player:  p2,
+		Payload: game.Id.String(),
+	}, nil)
+
+	<-p1.Outgoing // start turn
+	<-p2.Outgoing // wait turn
+
+	go game.Process(Event{
+		Type:   AttackPlayer,
+		Player: p1,
+		Payload: AttackPayload{
+			GameId:   game.Id.String(),
+			Attacker: payload.Card.GetId(),
+		},
+	}, nil)
+
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Error("expected game over response")
+	case res := <-p1.Outgoing:
+		if res.Type != GameOver {
+			t.Errorf("EXpected %v, got %v", GameOver, res.Type)
+		}
+
+		payload := res.Payload.(GameOverPayload)
+		if payload.Winner.player != p1 {
+			t.Error("Wrong winner")
+		}
+		if payload.Loser.player != p2 {
+			t.Error("Wrong loser")
+		}
+	}
+
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Error("expected game over response")
+	case res := <-p2.Outgoing:
+		if res.Type != GameOver {
+			t.Errorf("EXpected %v, got %v", GameOver, res.Type)
+		}
+		payload := res.Payload.(GameOverPayload)
+		if payload.Winner.player != p1 {
+			t.Error("Wrong winner")
+		}
+		if payload.Loser.player != p2 {
+			t.Error("Wrong loser")
+		}
+	}
+}

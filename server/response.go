@@ -26,6 +26,7 @@ const (
 	CardPlayed       ResponseType = "card_played"
 	AttackResult     ResponseType = "attack_result"
 	DamageTaken      ResponseType = "damage_taken"
+	GameOver         ResponseType = "game_over"
 
 	Error ResponseType = "error"
 )
@@ -48,4 +49,9 @@ type StartingHandPayload struct {
 	GameId  uuid.UUID
 	Cards   []HasManaCost
 	Players map[*Player]*GamePlayer
+}
+
+type GameOverPayload struct {
+	Winner *GamePlayer
+	Loser  *GamePlayer
 }

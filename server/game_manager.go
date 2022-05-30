@@ -197,35 +197,47 @@ func NewGame(players []*Player) *Game {
 					go game.StartTurns(75 * time.Second)
 				}
 			case duration := <-game.StartTurn:
+				var other *GamePlayer
+				var current *GamePlayer
+
 				for _, player := range game.Players {
 					if player.Current {
-						player.IncreaseMana(1)
-						player.RefillMana()
-
-						card := player.Deck.Draw()
-						player.Hand = append(player.Hand, card)
-
-						for _, minion := range player.Board.Defenders {
-							minion.SetStatus(&Ready{})
-						}
-
-						go player.Send(Response{
-							Type: StartTurn,
-							Payload: TurnPayload{
-								GameId:      game.Id,
-								CardsLeft:   player.Deck.Count(),
-								Card:        card,
-								CardsInHand: len(player.Hand),
-								Mana:        player.Mana,
-								Duration:    duration,
-							},
-						})
+						current = player
 					} else {
-						go player.Send(Response{
-							Type: WaitTurn,
-						})
+						other = player
 					}
 				}
+
+				current.IncreaseMana(1)
+				current.RefillMana()
+
+				card := current.Deck.Draw()
+				current.Hand = append(current.Hand, card)
+
+				for _, minion := range current.Board.Defenders {
+					minion.SetStatus(&Ready{})
+				}
+
+				go current.Send(Response{
+					Type: StartTurn,
+					Payload: TurnPayload{
+						GameId:      game.Id,
+						CardsLeft:   current.Deck.Count(),
+						Card:        card,
+						CardsInHand: len(current.Hand),
+						Mana:        current.Mana,
+						Duration:    duration,
+					},
+				})
+
+				go other.Send(Response{
+					Type: WaitTurn,
+					Payload: TurnPayload{
+						Mana:      current.Mana,
+						Duration:  duration,
+						CardsLeft: current.Deck.Count(),
+					},
+				})
 
 				go func() {
 					select {
@@ -348,13 +360,25 @@ func NewGame(players []*Player) *Game {
 				} else if len(other.Board.Defenders) == 0 {
 					other.ReduceHealth(attacker.GetDamage())
 
-					for _, player := range game.Players {
-						player.Send(Response{
-							Type: DamageTaken,
-							Payload: DamageTakenPayload{
-								Health: other.GetHealth(),
-							},
-						})
+					if other.GetHealth() <= 0 {
+						for _, player := range game.Players {
+							player.Send(Response{
+								Type: GameOver,
+								Payload: GameOverPayload{
+									Winner: current,
+									Loser:  other,
+								},
+							})
+						}
+					} else {
+						for _, player := range game.Players {
+							player.Send(Response{
+								Type: DamageTaken,
+								Payload: DamageTakenPayload{
+									Health: other.GetHealth(),
+								},
+							})
+						}
 					}
 				} else {
 					current.Send(Response{

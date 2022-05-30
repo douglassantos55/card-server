@@ -153,8 +153,12 @@ func NewGame(players []*Player) *Game {
 			case <-game.Started:
 				for _, player := range game.Players {
 					go player.Send(Response{
-						Type:    StartingHand,
-						Payload: player.Hand,
+						Type: StartingHand,
+						Payload: StartingHandPayload{
+							Cards:   player.Hand,
+							GameId:  game.Id,
+							Players: game.Players,
+						},
 					})
 				}
 			case event := <-game.Discard:

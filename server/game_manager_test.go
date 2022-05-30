@@ -38,9 +38,13 @@ func TestSendsThreeCardsAsStartingHand(t *testing.T) {
 		if response.Type != StartingHand {
 			t.Errorf("Expected %v, got %v", StartingHand, response.Type)
 		}
-		cards := response.Payload.([]HasManaCost)
-		if len(cards) != 3 {
-			t.Errorf("Expected %v cards, got %v", 3, len(cards))
+
+		payload := response.Payload.(StartingHandPayload)
+		if payload.GameId != game.Id {
+			t.Errorf("Expected %v, got %v", game.Id, payload.GameId)
+		}
+		if len(payload.Cards) != 3 {
+			t.Errorf("Expected %v cards, got %v", 3, len(payload.Cards))
 		}
 	}
 
@@ -51,9 +55,13 @@ func TestSendsThreeCardsAsStartingHand(t *testing.T) {
 		if response.Type != StartingHand {
 			t.Errorf("Expected %v, got %v", StartingHand, response.Type)
 		}
-		cards := response.Payload.([]HasManaCost)
-		if len(cards) != 3 {
-			t.Errorf("Expected %v cards, got %v", 3, len(cards))
+
+		payload := response.Payload.(StartingHandPayload)
+		if payload.GameId != game.Id {
+			t.Errorf("Expected %v, got %v", game.Id, payload.GameId)
+		}
+		if len(payload.Cards) != 3 {
+			t.Errorf("Expected %v cards, got %v", 3, len(payload.Cards))
 		}
 	}
 }
@@ -70,7 +78,7 @@ func TestReplacesDiscardedCards(t *testing.T) {
 	go game.Start(time.Minute)
 
 	res1 := <-p1.Outgoing
-	hand1 := res1.Payload.([]HasManaCost)
+	hand1 := res1.Payload.(StartingHandPayload)
 
 	<-p2.Outgoing
 
@@ -80,8 +88,8 @@ func TestReplacesDiscardedCards(t *testing.T) {
 		Payload: CardsDiscardedPayload{
 			GameId: game.Id.String(),
 			Cards: []string{
-				hand1[1].GetId(),
-				hand1[0].GetId(),
+				hand1.Cards[1].GetId(),
+				hand1.Cards[0].GetId(),
 			},
 		},
 	}
@@ -150,7 +158,7 @@ func TestConfirmWithoutDiscarding(t *testing.T) {
 	res := <-p1.Outgoing
 	<-p2.Outgoing
 
-	hand := res.Payload.([]HasManaCost)
+	hand := res.Payload.(StartingHandPayload)
 
 	dispatcher.Dispatch <- Event{
 		Type:   CardsDiscarded,
@@ -175,7 +183,7 @@ func TestConfirmWithoutDiscarding(t *testing.T) {
 		}
 
 		count := 0
-		for _, card := range hand {
+		for _, card := range hand.Cards {
 			for _, c := range cards {
 				if card.GetId() == c.GetId() {
 					count++
@@ -200,10 +208,10 @@ func TestStartsTurnsWhenBothPlayersChoseHand(t *testing.T) {
 	go game.Start(time.Minute)
 
 	res1 := <-p1.Outgoing
-	hand1 := res1.Payload.([]HasManaCost)
+	hand1 := res1.Payload.(StartingHandPayload)
 
 	res2 := <-p2.Outgoing
-	hand2 := res2.Payload.([]HasManaCost)
+	hand2 := res2.Payload.(StartingHandPayload)
 
 	dispatcher.Dispatch <- Event{
 		Type:   CardsDiscarded,
@@ -211,8 +219,8 @@ func TestStartsTurnsWhenBothPlayersChoseHand(t *testing.T) {
 		Payload: CardsDiscardedPayload{
 			GameId: game.Id.String(),
 			Cards: []string{
-				hand2[1].GetId(),
-				hand2[0].GetId(),
+				hand2.Cards[1].GetId(),
+				hand2.Cards[0].GetId(),
 			},
 		},
 	}
@@ -236,7 +244,7 @@ func TestStartsTurnsWhenBothPlayersChoseHand(t *testing.T) {
 		Payload: CardsDiscardedPayload{
 			GameId: game.Id.String(),
 			Cards: []string{
-				hand1[2].GetId(),
+				hand1.Cards[2].GetId(),
 			},
 		},
 	}
@@ -601,7 +609,7 @@ func TestPlayingCardsUsesMana(t *testing.T) {
 	res := <-p1.Outgoing // starting hand
 	<-p2.Outgoing        // starting hand
 
-	hand := res.Payload.([]HasManaCost)
+	hand := res.Payload.(StartingHandPayload)
 
 	// start turns
 	time.Sleep(110 * time.Millisecond)
@@ -624,14 +632,14 @@ func TestPlayingCardsUsesMana(t *testing.T) {
 	<-p1.Outgoing // card played
 	<-p2.Outgoing // card played
 
-	hand[0].ReduceManaCost(hand[0].GetManaCost() - 1)
+	hand.Cards[0].ReduceManaCost(hand.Cards[0].GetManaCost() - 1)
 
 	go game.Process(Event{
 		Type:   PlayCard,
 		Player: p1,
 		Payload: PlayCardPayload{
 			GameId: game.Id.String(),
-			Card:   hand[0].GetId(),
+			Card:   hand.Cards[0].GetId(),
 		},
 	}, nil)
 

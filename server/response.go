@@ -43,3 +43,9 @@ type DamageTakenPayload struct {
 	Health   int
 	PlayerId string
 }
+
+type StartingHandPayload struct {
+	GameId  uuid.UUID
+	Cards   []HasManaCost
+	Players map[*Player]*GamePlayer
+}

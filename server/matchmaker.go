@@ -11,14 +11,16 @@ func NewMatchmaker() *Matchmaker {
 func (m *Matchmaker) Process(event Event, dispatcher *Dispatcher) {
 	switch event.Type {
 	case CreateMatch:
-		players := event.Payload.([]*Player)
-		match := NewMatch(players, 5*time.Second)
+		go func() {
+			players := event.Payload.([]*Player)
+			match := NewMatch(players, 15*time.Second)
 
-		dispatcher.Register <- match
+			dispatcher.Register <- match
 
-		dispatcher.Dispatch <- Event{
-			Type:    AskConfirmation,
-			Payload: match.Id,
-		}
+			dispatcher.Dispatch <- Event{
+				Type:    AskConfirmation,
+				Payload: match.Id,
+			}
+		}()
 	}
 }

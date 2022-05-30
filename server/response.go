@@ -46,12 +46,20 @@ type DamageTakenPayload struct {
 }
 
 type StartingHandPayload struct {
-	GameId  uuid.UUID
-	Cards   []HasManaCost
-	Players map[*Player]*GamePlayer
+	Id       uuid.UUID
+	GameId   uuid.UUID
+	Cards    []HasManaCost
+	Duration time.Duration
 }
 
 type GameOverPayload struct {
 	Winner *GamePlayer
 	Loser  *GamePlayer
+}
+
+type CardPlayedPayload struct {
+	Mana   int
+	Player uuid.UUID
+	Card   ActiveDefender
+	GameId uuid.UUID
 }

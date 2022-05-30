@@ -48,6 +48,9 @@ func (s *Server) ListenQuietly(addr string) {
 }
 
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
+	s.upgrader.CheckOrigin = func(r *http.Request) bool {
+		return true
+	}
 	socket, err := s.upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -66,6 +69,7 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case event := <-player.Incoming:
+				event.Player = player
 				s.dispatcher.Dispatch <- event
 			}
 		}

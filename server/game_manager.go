@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mitchellh/mapstructure"
 )
 
 type Deck struct {
@@ -54,6 +55,7 @@ type Discarded struct {
 type GamePlayer struct {
 	player *Player
 
+	Id      uuid.UUID
 	Deck    *Deck
 	Health  int
 	Mana    int
@@ -124,7 +126,9 @@ func NewGame(players []*Player) *Game {
 		deck := NewDeck()
 
 		gamePlayers[player] = &GamePlayer{
-			player:  player,
+			player: player,
+
+			Id:      uuid.New(),
 			Health:  30,
 			Deck:    deck,
 			Current: idx == 0,
@@ -150,14 +154,15 @@ func NewGame(players []*Player) *Game {
 	go func() {
 		for {
 			select {
-			case <-game.Started:
+			case duration := <-game.Started:
 				for _, player := range game.Players {
 					go player.Send(Response{
 						Type: StartingHand,
 						Payload: StartingHandPayload{
-							Cards:   player.Hand,
-							GameId:  game.Id,
-							Players: game.Players,
+							Id:       player.Id,
+							Cards:    player.Hand,
+							GameId:   game.Id,
+							Duration: duration,
 						},
 					})
 				}
@@ -233,9 +238,11 @@ func NewGame(players []*Player) *Game {
 				go other.Send(Response{
 					Type: WaitTurn,
 					Payload: TurnPayload{
-						Mana:      current.Mana,
-						Duration:  duration,
-						CardsLeft: current.Deck.Count(),
+						GameId:      game.Id,
+						Mana:        current.Mana,
+						Duration:    duration,
+						CardsInHand: len(current.Hand),
+						CardsLeft:   current.Deck.Count(),
 					},
 				})
 
@@ -291,8 +298,13 @@ func NewGame(players []*Player) *Game {
 
 					for _, player := range game.Players {
 						go player.Send(Response{
-							Type:    CardPlayed,
-							Payload: played,
+							Type: CardPlayed,
+							Payload: CardPlayedPayload{
+								GameId: game.Id,
+								Card:   played,
+								Mana:   current.Mana,
+								Player: current.Id,
+							},
 						})
 					}
 				}
@@ -411,9 +423,14 @@ func (g *Game) Start(duration time.Duration) {
 func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 	switch event.Type {
 	case CardsDiscarded:
-		data := event.Payload.(CardsDiscardedPayload)
-		uuid, err := uuid.Parse(data.GameId)
+		var data CardsDiscardedPayload
 
+		err := mapstructure.Decode(event.Payload, &data)
+		if err != nil {
+			return
+		}
+
+		uuid, err := uuid.Parse(data.GameId)
 		if err != nil || uuid != g.Id {
 			return
 		}
@@ -431,18 +448,28 @@ func (g *Game) Process(event Event, dispatcher *Dispatcher) {
 
 		g.EndTurn <- event.Player
 	case PlayCard:
-		data := event.Payload.(PlayCardPayload)
-		uuid, err := uuid.Parse(data.GameId)
+		var data PlayCardPayload
 
+		err := mapstructure.Decode(event.Payload, &data)
+		if err != nil {
+			return
+		}
+
+		uuid, err := uuid.Parse(data.GameId)
 		if err != nil || uuid != g.Id {
 			return
 		}
 
 		g.PlayCard <- data
 	case Attack, AttackPlayer:
-		data := event.Payload.(AttackPayload)
-		uuid, err := uuid.Parse(data.GameId)
+		var data AttackPayload
 
+		err := mapstructure.Decode(event.Payload, &data)
+		if err != nil {
+			return
+		}
+
+		uuid, err := uuid.Parse(data.GameId)
 		if err != nil || uuid != g.Id {
 			return
 		}
@@ -460,8 +487,13 @@ func NewGameManager() *GameManager {
 func (gm *GameManager) Process(event Event, dispatcher *Dispatcher) {
 	switch event.Type {
 	case StartGame:
-		players := event.Payload.([]*Player)
-		game := NewGame(players)
-		dispatcher.Register <- game
+		go func() {
+			players := event.Payload.([]*Player)
+			game := NewGame(players)
+
+			dispatcher.Register <- game
+
+			game.Start(30 * time.Second)
+		}()
 	}
 }

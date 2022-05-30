@@ -435,13 +435,13 @@ func TestPlayCard(t *testing.T) {
 			t.Errorf("Expected %v, got %v", CardPlayed, response.Type)
 		}
 
-		got := response.Payload.(ActiveDefender)
+		got := response.Payload.(CardPlayedPayload)
 
-		if got.GetId() != payload.Card.GetId() {
+		if got.Card.GetId() != payload.Card.GetId() {
 			t.Errorf("Expected %v, got %v", payload.Card, got)
 		}
 
-		if got.GetStatus().CanAttack() {
+		if got.Card.GetStatus().CanAttack() {
 			t.Error("Should be exhausted")
 		}
 	}
@@ -454,13 +454,13 @@ func TestPlayCard(t *testing.T) {
 			t.Errorf("Expected %v, got %v", CardPlayed, response.Type)
 		}
 
-		got := response.Payload.(ActiveDefender)
+		got := response.Payload.(CardPlayedPayload)
 
-		if got.GetId() != payload.Card.GetId() {
+		if got.Card.GetId() != payload.Card.GetId() {
 			t.Errorf("Expected %v, got %v", payload.Card, got)
 		}
 
-		if got.GetStatus().CanAttack() {
+		if got.Card.GetStatus().CanAttack() {
 			t.Error("Should be exhausted")
 		}
 	}
